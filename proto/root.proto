@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package root;
+
+option go_package = "pb/root";
+
+message Source {
+  repeated File files = 1;
+}
+
+message File {
+  string name = 1;
+  bytes data = 2;
+}
+
+message FileLoaded {
+    string name = 1;
+}
+
+message Empty {}
+
+message Output {
+    string data = 1;
+}
+
+service Commander {
+  rpc Load(Source) returns (stream FileLoaded);
+  rpc Run(Empty) returns (stream Output);
+}
