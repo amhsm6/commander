@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 
 	pb "commander/pkg/pb/root"
@@ -16,19 +17,19 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", "localhost:5000", "Adress of Commander")
+	addr := flag.String("addr", "candlebot:5000", "Adress of Commander")
 	flag.Parse()
 
 	verb := flag.Arg(0)
 	if verb != "load" && verb != "run" {
 		log.Error("Invalid usage")
-		return
+		os.Exit(1)
 	}
 
 	conn, err := grpc.NewClient(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Error(err)
-		return
+		os.Exit(1)
 	}
 	defer conn.Close()
 
@@ -44,7 +45,7 @@ func main() {
 			data, err := os.ReadFile(path)
 			if err != nil {
 				log.Error(err)
-				return
+                os.Exit(1)
 			}
 
 			files = append(files, &pb.File{Name: name, Data: data})
@@ -53,7 +54,7 @@ func main() {
 		resp, err := client.Load(context.Background(), &pb.Source{Files: files})
 		if err != nil {
 			log.Error(err)
-			return
+			os.Exit(1)
 		}
 
 		for {
@@ -63,7 +64,7 @@ func main() {
 			}
 			if err != nil {
 				log.Error(err)
-				return
+                os.Exit(1)
 			}
 
 			log.Infof("Loaded: %v", status.GetName())
@@ -72,11 +73,34 @@ func main() {
 		log.Info("Done loading")
 
 	case "run":
-		resp, err := client.Run(context.Background(), &pb.Empty{})
+        ctx, cancel := context.WithCancel(context.Background())
+        defer cancel()
+
+		resp, err := client.Run(ctx)
 		if err != nil {
+            cancel()
+
 			log.Error(err)
-			return
+			os.Exit(1)
 		}
+
+        sigint := make(chan os.Signal, 15)
+        signal.Notify(sigint, os.Interrupt)
+
+        go func() {
+            select {
+            case <-sigint:
+                err := resp.Send(&pb.Interrupt{})
+                if err != nil {
+                    cancel()
+
+                    log.Error(err)
+                    os.Exit(1)
+                }
+            
+            case <-ctx.Done():
+            }
+        }()
 
 		for {
 			output, err := resp.Recv()
@@ -84,8 +108,10 @@ func main() {
 				break
 			}
 			if err != nil {
+                cancel()
+
 				log.Error(err)
-				return
+				os.Exit(1)
 			}
 
 			fmt.Print(output.GetData())

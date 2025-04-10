@@ -17,13 +17,13 @@ message FileLoaded {
     string name = 1;
 }
 
-message Empty {}
-
 message Output {
     string data = 1;
 }
 
+message Interrupt {}
+
 service Commander {
   rpc Load(Source) returns (stream FileLoaded);
-  rpc Run(Empty) returns (stream Output);
+  rpc Run(stream Interrupt) returns (stream Output);
 }

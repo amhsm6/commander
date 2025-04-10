@@ -48,7 +48,7 @@ func (s *CommServer) Load(source *pb.Source, resp grpc.ServerStreamingServer[pb.
 	return nil
 }
 
-func (s *CommServer) Run(_ *pb.Empty, resp grpc.ServerStreamingServer[pb.Output]) error {
+func (s *CommServer) Run(stream grpc.BidiStreamingServer[pb.Interrupt, pb.Output]) error {
 	log.Info("Command: Run")
 
 	cmd := exec.Command("python", "main.py")
@@ -69,6 +69,22 @@ func (s *CommServer) Run(_ *pb.Empty, resp grpc.ServerStreamingServer[pb.Output]
 		return status.Error(codes.Aborted, err.Error())
 	}
 
+    go func() {
+        _, err := stream.Recv()
+        if err == io.EOF {
+            return
+        }
+
+        if err != nil {
+            log.Error(err)
+        }
+
+        err = cmd.Process.Signal(os.Interrupt)
+        if err != nil {
+            log.Error(err)
+        }
+    }()
+
 	for {
 		line, err := output.ReadString('\n')
 		if err == io.EOF {
@@ -79,7 +95,13 @@ func (s *CommServer) Run(_ *pb.Empty, resp grpc.ServerStreamingServer[pb.Output]
 			return status.Error(codes.Aborted, err.Error())
 		}
 
-		resp.Send(&pb.Output{Data: line})
+        log.Info(line[:len(line)-1])
+
+		err = stream.Send(&pb.Output{Data: line})
+		if err != nil {
+			log.Error(err)
+			return status.Error(codes.Aborted, err.Error())
+		}
 	}
 
 	err = cmd.Wait()
@@ -97,7 +119,7 @@ func main() {
 	listener, err := net.Listen("tcp", ":5000")
 	if err != nil {
 		log.Error(err)
-		return
+		os.Exit(1)
 	}
 
 	server := grpc.NewServer()
@@ -108,6 +130,6 @@ func main() {
 	err = server.Serve(listener)
 	if err != nil {
 		log.Error(err)
-		return
+		os.Exit(1)
 	}
 }

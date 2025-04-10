@@ -1,6 +1,6 @@
 build:
 	GOARCH=arm64 go build -o bin/commander -ldflags '-s -w' ./cmd/commander
-	go build -o bin/command -ldflags '-s -w' ./cmd/command
+	go build -o bin/comm -ldflags '-s -w' ./cmd/comm
 
 dev:
 	CI=1 CLICOLOR_FORCE=1 air
