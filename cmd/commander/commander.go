@@ -43,8 +43,7 @@ func (s *CommServer) Load(source *pb.Source, resp grpc.ServerStreamingServer[pb.
 		}
 	}
 
-	log.Info("Done Load")
-
+	log.Info("Success: Load")
 	return nil
 }
 
@@ -69,21 +68,30 @@ func (s *CommServer) Run(stream grpc.BidiStreamingServer[pb.Interrupt, pb.Output
 		return status.Error(codes.Aborted, err.Error())
 	}
 
-    go func() {
-        _, err := stream.Recv()
-        if err == io.EOF {
-            return
-        }
+	go func() {
+		_, err := stream.Recv()
+		if err == io.EOF {
+			return
+		}
 
-        if err != nil {
-            log.Error(err)
-        }
+		if err != nil {
+			// TODO: if context cancelled by interrupt or success of command process - do not error
+			log.Error(err)
+		}
 
-        err = cmd.Process.Signal(os.Interrupt)
-        if err != nil {
-            log.Error(err)
-        }
-    }()
+		if cmd.ProcessState == nil || !cmd.ProcessState.Exited() {
+			log.Warn("Interrupting command...")
+
+			err = cmd.Process.Signal(os.Interrupt)
+			if err != nil {
+				log.Error(err)
+			}
+
+			log.Info("Interrupted successfully")
+		} else {
+			log.Warn("Command process has already finished")
+		}
+	}()
 
 	for {
 		line, err := output.ReadString('\n')
@@ -95,7 +103,7 @@ func (s *CommServer) Run(stream grpc.BidiStreamingServer[pb.Interrupt, pb.Output
 			return status.Error(codes.Aborted, err.Error())
 		}
 
-        log.Info(line[:len(line)-1])
+		log.Info(line[:len(line)-1])
 
 		err = stream.Send(&pb.Output{Data: line})
 		if err != nil {
@@ -107,16 +115,17 @@ func (s *CommServer) Run(stream grpc.BidiStreamingServer[pb.Interrupt, pb.Output
 	err = cmd.Wait()
 	if err != nil {
 		msg := fmt.Sprintf("%v:\n%v", err.Error(), stderr.String())
+
 		log.Error(msg)
 		return status.Error(codes.Aborted, msg)
 	}
 
-	log.Info("Done Run")
+	log.Info("Success: Run")
 	return nil
 }
 
 func main() {
-	listener, err := net.Listen("tcp", ":5000")
+	listener, err := net.Listen("tcp4", ":5000")
 	if err != nil {
 		log.Error(err)
 		os.Exit(1)

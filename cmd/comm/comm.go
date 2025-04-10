@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -26,7 +27,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	conn, err := grpc.NewClient(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(
+		*addr,
+		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
+			dialer := &net.Dialer{}
+			return dialer.DialContext(ctx, "tcp4", s)
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
 		log.Error(err)
 		os.Exit(1)
@@ -45,7 +53,7 @@ func main() {
 			data, err := os.ReadFile(path)
 			if err != nil {
 				log.Error(err)
-                os.Exit(1)
+				os.Exit(1)
 			}
 
 			files = append(files, &pb.File{Name: name, Data: data})
@@ -64,7 +72,7 @@ func main() {
 			}
 			if err != nil {
 				log.Error(err)
-                os.Exit(1)
+				os.Exit(1)
 			}
 
 			log.Infof("Loaded: %v", status.GetName())
@@ -73,34 +81,34 @@ func main() {
 		log.Info("Done loading")
 
 	case "run":
-        ctx, cancel := context.WithCancel(context.Background())
-        defer cancel()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
 		resp, err := client.Run(ctx)
 		if err != nil {
-            cancel()
+			cancel()
 
 			log.Error(err)
 			os.Exit(1)
 		}
 
-        sigint := make(chan os.Signal, 15)
-        signal.Notify(sigint, os.Interrupt)
+		sigint := make(chan os.Signal, 15)
+		signal.Notify(sigint, os.Interrupt)
 
-        go func() {
-            select {
-            case <-sigint:
-                err := resp.Send(&pb.Interrupt{})
-                if err != nil {
-                    cancel()
+		go func() {
+			select {
+			case <-sigint:
+				err := resp.Send(&pb.Interrupt{})
+				if err != nil {
+					cancel()
 
-                    log.Error(err)
-                    os.Exit(1)
-                }
-            
-            case <-ctx.Done():
-            }
-        }()
+					log.Error(err)
+					os.Exit(1)
+				}
+
+			case <-ctx.Done():
+			}
+		}()
 
 		for {
 			output, err := resp.Recv()
@@ -108,7 +116,7 @@ func main() {
 				break
 			}
 			if err != nil {
-                cancel()
+				cancel()
 
 				log.Error(err)
 				os.Exit(1)
