@@ -125,7 +125,7 @@ func (s *CommServer) Run(stream grpc.BidiStreamingServer[pb.Interrupt, pb.Output
 }
 
 func main() {
-	listener, err := net.Listen("tcp4", ":5000")
+	listener, err := net.Listen("tcp4", "0.0.0.0:5000")
 	if err != nil {
 		log.Error(err)
 		os.Exit(1)
