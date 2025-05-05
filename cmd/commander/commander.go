@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+    "time"
 
 	pb "commander/pkg/pb/root"
 
@@ -88,6 +89,9 @@ func (s *CommServer) Run(stream grpc.BidiStreamingServer[pb.Interrupt, pb.Output
 			}
 
 			log.Info("Interrupted successfully")
+
+            time.Sleep(time.Second * 3)
+            stdout.Close()
 		} else {
 			log.Warn("Command process has already finished")
 		}
